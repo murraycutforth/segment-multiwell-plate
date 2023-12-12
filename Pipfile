@@ -15,6 +15,9 @@ ipython = "*"
 mypy = "*"
 sphinx = "*"
 sphinx-rtd-theme = "*"
+twine = "*"
+setuptools = "*"
+wheel = "*"
 
 [requires]
 python_version = "3.11"

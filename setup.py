@@ -24,19 +24,16 @@ setup(
     author=about['__author__'],
     author_email=about['__author_email__'],
     url=about['__url__'],
-    packages=['py_pkg'],
+    packages=['segment_multiwell_plate'],
     include_package_data=True,
-    python_requires=">=3.7.*",
-    install_requires=['numpy', 'requests'],
+    python_requires=">=3.11",
+    install_requires=['numpy', 'scipy', 'scikit-image'],
     license=about['__license__'],
     zip_safe=False,
-    entry_points={
-        'console_scripts': ['py-package-template=py_pkg.entry_points:main'],
-    },
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
-        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.11',
     ],
-    keywords='package development template'
+    keywords='multiwell plate segmentation segment screen image analysis bioinformatics'
 )

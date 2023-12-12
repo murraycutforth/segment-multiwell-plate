@@ -1,6 +1,5 @@
 import functools
 import itertools
-import multiprocessing
 import logging
 
 import numpy as np

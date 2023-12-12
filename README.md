@@ -16,6 +16,8 @@ For a developer install, this repo can be installed with pipenv:
 
 `pipenv install --dev`
 
+The only code dependencies are `numpy`, `scipy`, and `scikit-image`.
+
 
 ## Usage
 

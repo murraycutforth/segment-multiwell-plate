@@ -17,17 +17,63 @@ For a developer install, this repo can be installed with pipenv:
 `pipenv install --dev`
 
 
+## Usage
+
+With defaults:
+
+    img_array = segment_multiwell_plate(image)
+
+Image can either by a 2D or 3D (channel, height, width) numpy array. Adjust resampling spline order and resolution of sub-images:
+
+    img_array = segment_multiwell_plate(image, resampling_order=3, subcell_resolution=32)
+
+ Detailed control of algorithm parameters can be obtained by passing extra parameters:
+
+    img_array = segment_multiwell_plate(
+      image,
+      blob_log_kwargs=dict(min_sigma=1, max_sigma=6, num_sigma=7, threshold=0.05, overlap=0.0, exclude_border=1),
+      peak_finder_kwargs=dict(peak_prominence=0.2, width=3, peak_spacing_atol=5))
+
+Extra output (the well coordinates, and the peak coordinates, both in image space) can be obtained like:
+
+    img_array, well_coords, i_peak_vals, j_peak_vals = segment_multiwell_plate(image, output_full=True)
+
+
+
 ## The Algorithm
 
 1. Use the Laplacian of Gaussians method (implemented in `scikit-image`) to find well centre coordinates
 2. For each of the x- and y- axes in turn:
-  a. Project all well centres onto this axis
-  b. Compute a histogram of well centre coordinates
-  c. Find peaks in this histogram using `scipy.signal.find_peaks()` - these correspond to estimated x/y coordinates of cell centres in the grid. However, at this point the estimated cell centres will be slightly irregular.
-3.  A regular 2D Cartesian grid is defined by $x0, \Delta x, N_x$ and $y0, \Delta y, N_y$ - the start point, spacing, and number of cells along each axis.
+
+     a. Project all well centres onto this axis
+  
+     b. Compute a histogram of well centre coordinates
+  
+     c. Find peaks in this histogram using `scipy.signal.find_peaks()` - these correspond to estimated x/y coordinates of cell centres in the grid. However, at this point the estimated cell centres will be slightly irregular.
+An example of this histogram is: ![peak_hist_640](https://github.com/murraycutforth/segment-multiwell-plate/assets/11088372/f65e0ef3-e483-464f-8608-67d44eb4d869)
+
+4.  A regular 2D Cartesian grid is defined by $x0, \Delta x, N_x$ and $y0, \Delta y, N_y$ - the start point, spacing, and number of cells along each axis.
 The number of cells is the number of peaks estimated in the previous step. The other two parameters are computed as the solution to an overdetermined (N x 2) linear
-system fitting a regular grid to the estimated cell centres, where we get the optimal (minimal L2 error) solution using a QR decomposition.
-4. Finally we partition the original image into an array of sub-images, using this grid. Each sub-image is resampled from the original image using `scipy.ndimage.map_coordinates`,
+system fitting a regular grid to the estimated cell centres, where we get the optimal (minimal L2 error) solution using a QR decomposition. For the x-axis, the linear system looks like:
+
+$$
+\begin{bmatrix}
+    1 & 0 \\
+    1 & 1 \\
+    \vdots & \vdots \\
+    1 & N-1
+\end{bmatrix} \begin{bmatrix}
+    x_0 \\
+    \Delta x
+\end{bmatrix} = \begin{bmatrix}
+    \text{Peak}_1 \\
+    \text{Peak}_2 \\
+    \vdots \\
+    \text{Peak}_N
+\end{bmatrix}
+$$
+
+5. Finally we partition the original image into an array of sub-images, using this grid. Each sub-image is resampled from the original image using `scipy.ndimage.map_coordinates`,
 which has options for high order spline interpolation.
 
  

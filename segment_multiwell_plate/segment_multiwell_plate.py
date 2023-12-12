@@ -89,7 +89,7 @@ def _find_well_centres_2d(image_2d: np.array,
     return well_coords
 
 
-def _generate_grid_crop_coordinates(image_2d: np.array,
+def _generate_grid_crop_coordinates(image: np.array,
                                     well_coords: list[np.array],
                                     peak_prominence: float = 0.2,
                                     width: int = 2,
@@ -98,7 +98,11 @@ def _generate_grid_crop_coordinates(image_2d: np.array,
     """Automatically find the grid of wells in the image stack
     """
     # TODO: we assume that image axes align with well grid axes here
-    peaks_i, peaks_j = _find_grid_coords(well_coords, image_2d.shape, peak_prominence, width, peak_spacing_atol)
+    peaks_i, peaks_j = _find_grid_coords(well_coords,
+                                         image_shape=(image.shape[-2], image.shape[-1]),
+                                         prominence=peak_prominence,
+                                         width=width,
+                                         peak_atol=peak_spacing_atol)
 
     num_rows = len(peaks_i)
     num_cols = len(peaks_j)
@@ -252,7 +256,7 @@ def _grid_crop(image: np.array,
         #    with multiprocessing.Pool(multiprocessing.cpu_count() // 2) as p:
         #        subcell_images = list(p.starmap(_resample_2d_image, resample_args))
 
-        subcell_images = map(resample_fn, image)
+        subcell_images = list(map(resample_fn, image))
 
         img_array[i, j] = np.squeeze(np.array(subcell_images))  # Squeeze used to reduce dimensionality if input is 2D
 

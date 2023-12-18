@@ -2,9 +2,11 @@ import functools
 import itertools
 import logging
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 from scipy import ndimage
+from scipy.fftpack import fft, ifft
 from skimage import feature, filters
 
 logger = logging.getLogger(__name__)
@@ -42,7 +44,7 @@ def find_well_centres(image: np.array,
                       min_sigma=2,
                       max_sigma=5,
                       num_sigma=4,
-                      threshold=0.03,
+                      threshold=0.2,
                       overlap=0.0,
                       exclude_border=1
                       ) -> list[np.array]:
@@ -75,7 +77,7 @@ def _find_well_centres_2d(image_2d: np.array,
     """
     assert len(image_2d.shape) == 2
 
-    image_2d = image_2d / image_2d.max()
+    image_2d = image_2d / image_2d.max()  # Normalise to [0,1]
 
     well_coords = feature.blob_log(image_2d,
                                    min_sigma=min_sigma,
@@ -93,16 +95,20 @@ def _generate_grid_crop_coordinates(image: np.array,
                                     well_coords: list[np.array],
                                     peak_prominence: float = 0.2,
                                     width: int = 2,
-                                    peak_spacing_atol: float = 2.
+                                    filter_threshold: float = 0.2,
                                     ) -> tuple[np.array, np.array]:
     """Automatically find the grid of wells in the image stack
+
+    :returns: Arrays of the cell edge coordinates in each dimension
     """
     # TODO: we assume that image axes align with well grid axes here
-    peaks_i, peaks_j = _find_grid_coords(well_coords,
-                                         image_shape=(image.shape[-2], image.shape[-1]),
-                                         prominence=peak_prominence,
-                                         width=width,
-                                         peak_atol=peak_spacing_atol)
+    peaks_i, peaks_j = _find_histogram_peaks(well_coords,
+                                             image_shape=(image.shape[-2], image.shape[-1]),
+                                             prominence=peak_prominence,
+                                             width=width)
+
+    peaks_i, median_di = _filter_spurious_peaks(peaks_i, threshold=filter_threshold)
+    peaks_j, median_dj = _filter_spurious_peaks(peaks_j, threshold=filter_threshold)
 
     num_rows = len(peaks_i)
     num_cols = len(peaks_j)
@@ -116,7 +122,8 @@ def _generate_grid_crop_coordinates(image: np.array,
     logger.debug(f"Optimal grid params found: i0={i0}, di={di}, j0={j0}, dj={dj}")
 
     # Assume that wells are equally spaced in both dimensions
-    assert abs(di - dj) < peak_spacing_atol
+    if abs(di - dj) / di > 0.1:
+        logger.warning(f"Unequal well spacing found. di={di:.2f}, dj={dj:.2f}")
 
     # Convert to cell edges and return
     i_vals = _find_cell_edges(i0, di, num_rows)
@@ -125,25 +132,47 @@ def _generate_grid_crop_coordinates(image: np.array,
     return i_vals, j_vals
 
 
-def _find_grid_coords(well_coords: list[np.array],
-                      image_shape: tuple[int, int],
-                      prominence: float,
-                      width: int,
-                      peak_atol: float,
-                      ) -> tuple[list, list]:
+def _filter_spurious_peaks(peaks: list, threshold=0.2) -> tuple[list, float]:
+    """Detect and remove false positive wells, using assumption of a regular grid
+    """
+    if not peaks:
+        return peaks
+
+    intervals = np.diff(peaks)
+
+    median_interval = np.median(intervals)  # We use this as our estimate of grid spacing, robust to outliers
+
+    relative_differences = np.abs((intervals - median_interval) / median_interval)
+
+    # True where the interval is anomalous - probably not a true peak of the grid
+    outliers = relative_differences > threshold
+
+    # We pad so that outliers on either end are found
+    outliers = np.pad(outliers, pad_width=1, mode="constant", constant_values=True)
+
+    # Find pairs of "True" values
+    fn = lambda x: x[0] & x[1]
+    outliers = list(map(fn, itertools.pairwise(outliers)))
+
+    outlier_inds = np.where(outliers)[0]
+
+    filtered_time_points = list(np.delete(peaks, outlier_inds))
+
+    return filtered_time_points, median_interval
+
+
+def _find_histogram_peaks(well_coords: list[np.array],
+                          image_shape: tuple[int, int],
+                          prominence: float,
+                          width: int,
+                          ) -> tuple[list, list]:
     """Count the number of peaks on the histogram of well centre coordinates, in order to find cell centres on each axis
     """
     def find_n_one_axis(coords, n) -> list:
         # Find the well coordinates along one axis by finding peaks in the histogram
-
         hist, _ = np.histogram(coords, range=(0, n), bins=n)
-        smoothed_hist = ndimage.gaussian_filter1d(hist, 2)
+        smoothed_hist = ndimage.gaussian_filter1d(hist.astype(np.float32), 1)
         peaks, _ = scipy.signal.find_peaks(smoothed_hist / smoothed_hist.max(), prominence=prominence, width=width)
-
-        # Check that this result is approximately correct by looking at the difference between each peak coordinate
-        diffs = np.diff(peaks, n=1)
-        assert np.allclose(diffs, np.mean(diffs), atol=peak_atol)  # Peaks should be regularly spaced to within +/- 2 pixels
-
         return list(peaks)
 
     i_coords = [x[0] for x in well_coords]
@@ -152,7 +181,6 @@ def _find_grid_coords(well_coords: list[np.array],
     peaks_j = find_n_one_axis(j_coords, image_shape[1])
 
     return peaks_i, peaks_j
-
 
 
 def _find_cell_edges(x0: float, dx: float, nx: int) -> np.array:

@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import skimage.io
 
 from segment_multiwell_plate import find_well_centres
 from segment_multiwell_plate.segment_multiwell_plate import _find_well_centres_2d
@@ -77,6 +78,21 @@ class TestFindWellCentres(unittest.TestCase):
         # Check if the detected well coordinates are close to the actual blob positions
         for detected_coord, actual_coord in zip(well_coords, [(25, 25), (50, 50), (75, 75)]):
             self.assertTrue(np.allclose(detected_coord, actual_coord, atol=1e-1))
+
+
+class TestFindWellCentresRealData(unittest.TestCase):
+
+    def setUp(self):
+        # Create a test image with Gaussian blobs
+        self.image_2d = skimage.io.imread("test_plate_onerow.png", as_gray=True)
+
+    def test_find_well_centres_high_t(self):
+        well_coords = find_well_centres(self.image_2d, threshold=0.5)
+        self.assertListEqual([], well_coords)
+
+    def test_find_well_centres(self):
+        well_coords = find_well_centres(self.image_2d, threshold=0.12)
+        self.assertEqual(341, len(well_coords))
 
 
 if __name__ == '__main__':

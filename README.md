@@ -85,3 +85,10 @@ which has options for high order spline interpolation.
 
 - The method currently assumes that the array of wells is aligned with the image axes, future work could relax this assumption by implementing a rotation finding step, perhaps optimising the entropy of the histogram?
 - The QR decomposition used in the linear least squares sub-problem could be replaced by an analytic solution, but the runtime is currently bottlenecked by the resampling so there's probably no need.
+
+
+## Release steps
+
+1. Update version number in `__version__.py`
+2. `pipenv run python setup.py sdist bdist_wheel`
+3. `pipenv run twine upload dist/*`

@@ -21,6 +21,15 @@ def segment_multiwell_plate(image: np.array,
     """Split an image of a multiwell plate into array of sub-images of each well
 
     Note: we assume that the image axes align with the well grid axes.
+
+    Example with all possible args:
+
+    img_array = segment_multiwell_plate(
+      image,
+      resampling_order=1,
+      subcell_resolution=20,
+      blob_log_kwargs=dict(min_sigma=1, max_sigma=6, num_sigma=7, threshold=0.05, overlap=0.0, exclude_border=1),
+      peak_finder_kwargs=dict(peak_prominence=0.2, width=2, filter_threshold=0.2))
     """
     if blob_log_kwargs is None:
         blob_log_kwargs = {}

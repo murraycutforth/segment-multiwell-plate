@@ -33,8 +33,10 @@ Image can either by a 2D or 3D (channel, height, width) numpy array. Adjust resa
 
     img_array = segment_multiwell_plate(
       image,
+      resampling_order=1,
+      subcell_resolution=20,
       blob_log_kwargs=dict(min_sigma=1, max_sigma=6, num_sigma=7, threshold=0.05, overlap=0.0, exclude_border=1),
-      peak_finder_kwargs=dict(peak_prominence=0.2, width=3, peak_spacing_atol=5))
+      peak_finder_kwargs=dict(peak_prominence=0.2, width=2, filter_threshold=0.2))
 
 Extra output (the well coordinates, and the peak coordinates, both in image space) can be obtained like:
 

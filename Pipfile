@@ -7,6 +7,7 @@ name = "pypi"
 numpy = "1.26"
 scipy = "1.11"
 scikit-image = "0.22"
+matplotlib = "*"
 
 [dev-packages]
 "flake8" = "*"

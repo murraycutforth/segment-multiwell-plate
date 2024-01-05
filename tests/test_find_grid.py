@@ -91,6 +91,8 @@ class TestFindGridOneRow(unittest.TestCase):
 
         self.assertEqual(16, img_array.shape[0])
         self.assertEqual(24, img_array.shape[1])
+        self.assertEqual(21, img_array.shape[-1])
+        self.assertEqual(21, img_array.shape[-2])
 
     def test_segment_multiwell_plate_onerow_extra_wells(self):
         # In this test, we turn down the log threshold so there are FP well detections, and see if the peak finder can

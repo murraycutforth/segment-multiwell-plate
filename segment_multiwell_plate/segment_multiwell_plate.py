@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def segment_multiwell_plate(image: np.array,
                             resampling_order: int = 1,
-                            subcell_resolution: int = 20,
+                            subcell_resolution: int = None,
                             blob_log_kwargs: dict = None,
                             peak_finder_kwargs: dict = None,
                             output_full: bool = False):
@@ -30,6 +30,15 @@ def segment_multiwell_plate(image: np.array,
       subcell_resolution=20,
       blob_log_kwargs=dict(min_sigma=1, max_sigma=6, num_sigma=7, threshold=0.05, overlap=0.0, exclude_border=1),
       peak_finder_kwargs=dict(peak_prominence=0.2, width=2, filter_threshold=0.2))
+
+    :param image: 2D or 3D image of a multiwell plate
+    :param resampling_order: order of interpolation used when resampling the image to each well
+    :param subcell_resolution: resolution of the resampled image of each well. If None, this is chosen automatically.
+    :param blob_log_kwargs: kwargs passed to skimage.feature.blob_log
+    :param peak_finder_kwargs: kwargs passed to _generate_grid_crop_coordinates
+    :param output_full: if True, return the full output of the segmentation algorithm, including well coordinates and
+    grid crop coordinates
+    :return: array of sub-images of each well, or tuple of (img_array, well_coords, i_vals, j_vals) if output_full=True
     """
     if blob_log_kwargs is None:
         blob_log_kwargs = {}
@@ -267,6 +276,12 @@ def _grid_crop(image: np.array,
 
     img_shape = image.shape
     grid_shape = (len(i_vals), len(j_vals))
+
+    if subcell_resolution is None:
+        dx = j_vals[1] - j_vals[0]
+        dy = i_vals[1] - i_vals[0]
+        subcell_resolution = int(0.5 * (dx + dy))
+        logger.debug(f"Automatically setting subcell_resolution to {subcell_resolution}")
 
     # Prepare storage for resampled well images
     if len(img_shape) == 3:

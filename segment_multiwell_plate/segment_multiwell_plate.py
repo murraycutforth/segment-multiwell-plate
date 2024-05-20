@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 from scipy import ndimage
-from scipy.fftpack import fft, ifft
 from skimage import feature, filters
 
 logger = logging.getLogger(__name__)
@@ -17,7 +16,8 @@ def segment_multiwell_plate(image: np.array,
                             subcell_resolution: int = None,
                             blob_log_kwargs: dict = None,
                             peak_finder_kwargs: dict = None,
-                            output_full: bool = False):
+                            output_full: bool = False,
+                            correct_rotations: bool = False):
     """Split an image of a multiwell plate into array of sub-images of each well
 
     Note: we assume that the image axes align with the well grid axes.
@@ -38,8 +38,12 @@ def segment_multiwell_plate(image: np.array,
     :param peak_finder_kwargs: kwargs passed to _generate_grid_crop_coordinates
     :param output_full: if True, return the full output of the segmentation algorithm, including well coordinates and
     grid crop coordinates
+    :param correct_rotations: if True, try to automatically correct for small rotations in the well image
     :return: array of sub-images of each well, or tuple of (img_array, well_coords, i_vals, j_vals) if output_full=True
     """
+    if correct_rotations:
+        image = correct_small_rotations(image, blob_log_kwargs)
+
     if blob_log_kwargs is None:
         blob_log_kwargs = {}
 
@@ -81,6 +85,72 @@ def find_well_centres(image: np.array,
     well_coords = _find_well_centres_2d(image_2d, min_sigma, max_sigma, num_sigma, threshold, overlap, exclude_border)
 
     return well_coords
+
+
+def correct_small_rotations(image: np.array, blob_log_kwargs: dict) -> np.array:
+    """Automatically rotate the image so that it is parallel to the coordinate axes.
+
+    Note:
+        Based on a PCA of the well centres, so will fail if the wells are rotationally-symmetric.
+    """
+    if blob_log_kwargs is None:
+        blob_log_kwargs = {}
+
+    well_coords = find_well_centres(image, **blob_log_kwargs)
+
+    rotation_angle = _find_rotation_angle(well_coords)
+
+    logger.info(f"Rotating image by {np.rad2deg(rotation_angle):.2f} degrees")
+    assert abs(rotation_angle) < np.deg2rad(15), "Rotation angle is too large"
+
+    # Rotate the image by the angle found, padding with zeros by default
+    image = ndimage.rotate(image, rotation_angle, reshape=False, axes=(2, 1))
+
+    return image
+
+
+def _find_rotation_angle(well_coords: list[np.array]) -> float:
+    """Apply a small rotation (<15 degrees) to the well_coords so that they align with the coordinate axes.
+    Returns rotation angle needed to correct data.
+    """
+    well_coords = np.array(well_coords)
+    assert well_coords.shape[1] == 2
+    assert well_coords.shape[0] > 1
+    assert well_coords.ndim == 2
+
+    # Centre the well_coords and compute PCA via SVD
+    offset = np.mean(well_coords, axis=0)
+    well_coords = well_coords - offset
+    U, S, Vt = np.linalg.svd(well_coords)
+
+    Sigma = np.zeros((len(well_coords), 2), dtype=float)
+    Sigma[:2, :2] = np.diag(S)
+    assert np.allclose(np.dot(U, np.dot(Sigma, Vt)), well_coords)
+
+    principal_component = Vt[0, :]
+    pc_angle = np.arctan(principal_component[1] / principal_component[0])  # Note we don't need to use atan2 here,
+    # because we don't care about the sign of the principal component
+
+    min_rotation_rad = np.deg2rad(15)  # We only try to correct small rotations
+
+    # Now we assume that the principle component should be aligned with one of the axes
+    if abs(pc_angle) < min_rotation_rad:
+        correction_angle = - pc_angle
+    elif abs(pc_angle - np.pi) < min_rotation_rad:
+        correction_angle = - (pc_angle - np.pi)
+    elif abs(pc_angle - np.pi / 2.0) < min_rotation_rad:
+        correction_angle = - (pc_angle - np.pi / 2.0)
+    elif abs(pc_angle + np.pi / 2.0) < min_rotation_rad:
+        correction_angle = - (pc_angle + np.pi / 2.0)
+    else:
+        logger.error(f"Principle component is not aligned with either axis. Angle is {np.rad2deg(pc_angle):.2f} degrees")
+        raise ValueError
+
+    return correction_angle
+
+
+
+
 
 
 def _find_well_centres_2d(image_2d: np.array,

@@ -134,10 +134,9 @@ def _find_rotation_angle(well_coords: list[np.array]) -> float:
     min_rotation_rad = np.deg2rad(15)  # We only try to correct small rotations
 
     # Now we assume that the principle component should be aligned with one of the axes
+    # The range of arctan is -pi/2 to pi/2
     if abs(pc_angle) < min_rotation_rad:
         correction_angle = - pc_angle
-    elif abs(pc_angle - np.pi) < min_rotation_rad:
-        correction_angle = - (pc_angle - np.pi)
     elif abs(pc_angle - np.pi / 2.0) < min_rotation_rad:
         correction_angle = - (pc_angle - np.pi / 2.0)
     elif abs(pc_angle + np.pi / 2.0) < min_rotation_rad:

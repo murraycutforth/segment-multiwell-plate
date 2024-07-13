@@ -87,28 +87,105 @@ def find_well_centres(image: np.array,
     return well_coords
 
 
-def correct_small_rotations(image: np.array, blob_log_kwargs: dict) -> np.array:
+def correct_rotations(image: np.array, well_coords) -> tuple[np.array, np.array]:
     """Automatically rotate the image so that it is parallel to the coordinate axes.
 
-    Note:
-        Based on a PCA of the well centres, so will fail if the wells are rotationally-symmetric.
+    Algorithm:
+        Find smallest rotation angle such that the Manhattan distance metric between neighbouring points is minimised.
+        We assume that a rotation of +- pi/4 is sufficient to correct the rotation. If the image has mistakenly
+        been rotated by more than this, this algorithm will converge to an unexpected orientation (e.g. vertically
+        rather than horizontally). This optimisation method is sensitive to the scale of the coordinates, so we
+        rescale the well coords to unit length during the algorithm.
+
+    Returns:
+        - rotated image
+        - rotated well coordinates
     """
-    if blob_log_kwargs is None:
-        blob_log_kwargs = {}
+    assert len(image.shape) == 2
+    assert len(well_coords.shape) == 2
+    assert well_coords.shape[1] == 2
 
-    well_coords = find_well_centres(image, **blob_log_kwargs)
+    def d_manhattan_min(x: np.array, X: np.array) -> float:
+        """Compute minimum manhattan distance from x to all entries of X
+        """
+        assert x.shape == (2,)
+        assert X.shape[1] == 2
+        assert len(X.shape) == 2
 
-    rotation_angle = _find_rotation_angle(well_coords)
+        d_all = np.sum(np.abs(X - x), axis=1)
+        d_min = np.min(d_all)
 
-    logger.info(f"Rotating image by {np.rad2deg(rotation_angle):.2f} degrees")
-    assert abs(rotation_angle) < np.deg2rad(15), "Rotation angle is too large"
+        return d_min
 
-    # Rotate the image by the angle found, padding with zeros by default
-    image = ndimage.rotate(image, rotation_angle, reshape=False, axes=(2, 1))
+    def average_d_min(X: np.array) -> float:
+        """Compute the min Manhattan distance, averaged across all entries of X
+        """
+        assert X.shape[1] == 2
+        assert len(X.shape) == 2
 
-    return image
+        # Compute all pairwise manhattan distances: dists[i, j] = || x_i - x_j ||_1
+        diffs = X[:, :, None] - X.T[None, :, :]
+        dists = np.sum(np.abs(diffs), axis=1)
+
+        # Now for each column, find the min value, excepting the diagonal
+        inf_diags = np.diag(np.full(len(dists), fill_value=np.inf))
+        dists = dists + inf_diags
+
+        min_dists = np.min(dists, axis=0)
+        mean_min_dist = np.mean(min_dists)
+        return mean_min_dist
+
+    def average_d_min_slow(X: np.array) -> float:
+
+        d_mins = []
+        for i in range(len(X)):
+            mask = np.ones(len(X), dtype=bool)
+            mask[i] = False
+            X_except_i = X[mask]
+            d_min = d_manhattan_min(x=X[i], X=X_except_i)
+            d_mins.append(d_min)
+
+        return np.mean(d_mins)
+
+    def cost(rotation_angle) -> float:
+        assert -np.pi <= rotation_angle <= np.pi
+
+        rotation_matrix = np.array([[np.cos(rotation_angle), -np.sin(rotation_angle)],
+                                    [np.sin(rotation_angle), np.cos(rotation_angle)]])
+        rotated_coords = well_coords @ rotation_matrix.T
+
+        cost = average_d_min(rotated_coords)
+
+        return cost
+
+    # First, centre the well coordinates so the rotation does not affect average position
+    original_well_centroid = np.mean(well_coords, axis=0)
+    well_coords -= original_well_centroid
+
+    # Rescale the well cords to approx unit length (must be isotropic)
+    scale_fac = np.max(well_coords.max(axis=0) - well_coords.min(axis=0))
+    well_coords /= scale_fac
+
+    result = scipy.optimize.minimize_scalar(cost, bounds=(-np.pi / 4, np.pi / 4), method='bounded', tol=1e-3)
+    dx = result.fun - result.x
+    theta = result.x
+
+    logger.debug(f"Correcting rotation by {np.rad2deg(theta):.2f} degrees")
+    logger.debug(f"Converged Manhattan distance: {dx:.2f}")
+
+    rotated_image = ndimage.rotate(image, np.rad2deg(theta), mode='nearest', reshape=False)
+    rotated_wells = well_coords @ np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]).T
+
+    # Undo the translations
+    rotated_wells *= scale_fac
+    well_coords *= scale_fac
+    rotated_wells += original_well_centroid
+    well_coords += original_well_centroid
+
+    return rotated_image, rotated_wells
 
 
+# TODO: deprecated!
 def _find_rotation_angle(well_coords: list[np.array]) -> float:
     """Apply a small rotation (<15 degrees) to the well_coords so that they align with the coordinate axes.
     Returns rotation angle needed to correct data.

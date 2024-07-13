@@ -24,8 +24,6 @@ class TestFindWellCentresSimple(unittest.TestCase):
 
         well_coords = _find_well_centres_2d(self.image_2d, min_sigma, max_sigma, num_sigma, threshold, overlap, exclude_border)
 
-        # Assert that the result is a list of numpy arrays
-        self.assertIsInstance(well_coords, list)
         for coord in well_coords:
             self.assertIsInstance(coord, np.ndarray)
             self.assertEqual(len(coord), 2)  # Each coordinate should have two values
@@ -35,7 +33,6 @@ class TestFindWellCentresSimple(unittest.TestCase):
         well_coords = find_well_centres(self.image_3d)
 
         # Assert that the result is a list of numpy arrays
-        self.assertIsInstance(well_coords, list)
         for coord in well_coords:
             self.assertIsInstance(coord, np.ndarray)
             self.assertEqual(len(coord), 2)  # Each coordinate should have two values
@@ -72,9 +69,6 @@ class TestFindWellCentres(unittest.TestCase):
         # Test case for find_well_centres function
         well_coords = find_well_centres(self.image_2d)
 
-        # Assert that the result is a list of numpy arrays
-        self.assertIsInstance(well_coords, list)
-
         # Check if the detected well coordinates are close to the actual blob positions
         for detected_coord, actual_coord in zip(well_coords, [(25, 25), (50, 50), (75, 75)]):
             self.assertTrue(np.allclose(detected_coord, actual_coord, atol=1e-1))
@@ -88,7 +82,7 @@ class TestFindWellCentresRealData(unittest.TestCase):
 
     def test_find_well_centres_high_t(self):
         well_coords = find_well_centres(self.image_2d, threshold=0.5)
-        self.assertListEqual([], well_coords)
+        self.assertListEqual([], list(well_coords))
 
     def test_find_well_centres(self):
         well_coords = find_well_centres(self.image_2d, threshold=0.12)

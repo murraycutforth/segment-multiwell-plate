@@ -47,7 +47,8 @@ Extra output (the well coordinates, and the peak coordinates, both in image spac
 ## The Algorithm
 
 1. Use the Laplacian of Gaussians method (implemented in `scikit-image`) to find well centre coordinates
-2. For each of the x- and y- axes in turn:
+2. Rotate the image and well centres so that the well grid is aligned with the coordinate axes. This is done by finding a rotation which minimises the Manhattan (L1) distance between neighbouring well centres.
+3. For each of the x- and y- axes in turn:
 
      a. Project all well centres onto this axis
   
@@ -83,7 +84,6 @@ which has options for high order spline interpolation.
  
 ## TODO
 
-- The method currently assumes that the array of wells is aligned with the image axes, future work could relax this assumption by implementing a rotation finding step, perhaps optimising the entropy of the histogram?
 - The QR decomposition used in the linear least squares sub-problem could be replaced by an analytic solution, but the runtime is currently bottlenecked by the resampling so there's probably no need.
 
 

@@ -105,18 +105,6 @@ def correct_rotations(image: np.array, well_coords) -> tuple[np.array, np.array]
     assert len(well_coords.shape) == 2
     assert well_coords.shape[1] == 2
 
-    def d_manhattan_min(x: np.array, X: np.array) -> float:
-        """Compute minimum manhattan distance from x to all entries of X
-        """
-        assert x.shape == (2,)
-        assert X.shape[1] == 2
-        assert len(X.shape) == 2
-
-        d_all = np.sum(np.abs(X - x), axis=1)
-        d_min = np.min(d_all)
-
-        return d_min
-
     def average_d_min(X: np.array) -> float:
         """Compute the min Manhattan distance, averaged across all entries of X
         """
@@ -134,18 +122,6 @@ def correct_rotations(image: np.array, well_coords) -> tuple[np.array, np.array]
         min_dists = np.min(dists, axis=0)
         mean_min_dist = np.mean(min_dists)
         return mean_min_dist
-
-    def average_d_min_slow(X: np.array) -> float:
-
-        d_mins = []
-        for i in range(len(X)):
-            mask = np.ones(len(X), dtype=bool)
-            mask[i] = False
-            X_except_i = X[mask]
-            d_min = d_manhattan_min(x=X[i], X=X_except_i)
-            d_mins.append(d_min)
-
-        return np.mean(d_mins)
 
     def cost(rotation_angle) -> float:
         assert -np.pi <= rotation_angle <= np.pi

@@ -102,57 +102,36 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
     assert len(well_coords.shape) == 2
     assert well_coords.shape[1] == 2
 
-    def average_d_min(X: np.array) -> float:
-        """Compute the min Manhattan distance, averaged across all entries of X
-        """
-        assert X.shape[1] == 2
-        assert len(X.shape) == 2
-
-        # Compute all pairwise manhattan distances: dists[i, j] = || x_i - x_j ||_1
-        diffs = X[:, :, None] - X.T[None, :, :]
-        dists = np.sum(np.abs(diffs), axis=1)
-
-        # Now for each column, find the min value, excepting the diagonal
-        inf_diags = np.diag(np.full(len(dists), fill_value=np.inf))
-        dists = dists + inf_diags
-
-        min_dists = np.min(dists, axis=0)
-
-        # For more robustness, only take the mean of the 25 to 75 percentile of distances
-        # This is because in sparse grids, the nearest neighbour will be across a diagonal (and therefore pushing away from a level grid)
-        min_dists = np.sort(min_dists)
-        min_dists = min_dists[int(0.25 * len(min_dists)):int(0.75 * len(min_dists))]
-        mean_min_dist = np.mean(min_dists)
-        return mean_min_dist
-
     def cost(rotation_angle) -> float:
         """Cost function to be minimised: find the rotation angle which minimises the L1 distance between neighbours
         """
+        if isinstance(rotation_angle, np.ndarray):
+            rotation_angle = rotation_angle[0]
+
         assert -np.pi <= rotation_angle <= np.pi
 
         rotation_matrix = np.array([[np.cos(rotation_angle), -np.sin(rotation_angle)],
                                     [np.sin(rotation_angle), np.cos(rotation_angle)]])
         rotated_coords = well_coords @ rotation_matrix.T
 
-        cost = average_d_min(rotated_coords)
+        cost = _average_d_min(rotated_coords)
 
         return cost
 
-    # First, centre the well coordinates so the rotation does not affect average position
-    original_well_centroid = np.mean(well_coords, axis=0)
-    well_coords = np.copy(well_coords)
-    well_coords -= original_well_centroid
-
-    # Rescale the well cords to approx unit length (must be isotropic)
-    scale_fac = np.max(well_coords.max(axis=0) - well_coords.min(axis=0))
-    well_coords /= scale_fac
+    # Note - the minimiser is invariant to translations, and I haven't observed that rescaling the points is important either
+    # since the tolerance is defined in terms of theta, in radians.
 
     result = scipy.optimize.minimize_scalar(cost, bounds=(-np.pi / 4, np.pi / 4), method='bounded', tol=1e-3)
-    dx = result.fun - result.x
     theta = result.x
 
+    # Because inside the cost function we are rotating well coords by applying a rotation matrix, the cost function
+    # should be pretty convex, so this global optimiser does not help. The point at which we may want to consider
+    # a global optimiser is where we calculate the cell centres. Could we introduce noise here, and then repeat the
+    # optimisation for different well coordinates?
+    #result = scipy.optimize.basinhopping(cost, x0=[0,], niter=10, stepsize=0.01, T=0.1)
+    #theta = result.x[0]
+
     logger.debug(f"Correcting rotation by {np.rad2deg(theta):.2f} degrees")
-    logger.debug(f"Converged Manhattan distance: {dx:.2f}")
 
     rotated_image = ndimage.rotate(image, np.rad2deg(theta), mode='nearest', reshape=False)
 
@@ -160,6 +139,26 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
         return rotated_image, theta
     else:
         return rotated_image
+
+
+def _average_d_min(X: np.array) -> float:
+    """Compute the min Manhattan distance, averaged across all entries of X
+    """
+    assert X.shape[1] == 2, X.shape
+    assert len(X.shape) == 2
+
+    # Compute all pairwise manhattan distances: dists[i, j] = || x_i - x_j ||_1
+    diffs = X[:, :, None] - X.T[None, :, :]
+    dists = np.sum(np.abs(diffs), axis=1)
+
+    # Now for each column, find the min value, excepting the diagonal
+    inf_diags = np.diag(np.full(len(dists), fill_value=np.inf))
+    dists = dists + inf_diags
+    min_dists = np.min(dists, axis=0)
+
+    mean_min_dist = np.mean(min_dists)
+
+    return mean_min_dist
 
 
 def _find_well_centres_2d(image_2d: np.array,

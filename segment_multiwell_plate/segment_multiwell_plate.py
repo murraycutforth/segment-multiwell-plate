@@ -1,9 +1,8 @@
 import functools
 import itertools
 import logging
-from typing import Optional
+from typing import Type
 
-import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 from scipy import ndimage
@@ -43,9 +42,10 @@ def segment_multiwell_plate(image: np.array,
     if blob_log_kwargs is None:
         blob_log_kwargs = {}
 
-    well_coords = find_well_centres(image, **blob_log_kwargs)
+    image = correct_rotations(image, well_coords=find_well_centres(image, **blob_log_kwargs))
 
-    image, well_coords = correct_rotations(image, well_coords)
+    # Re-locate well coords after rotation correction
+    well_coords = find_well_centres(image, **blob_log_kwargs)
 
     if peak_finder_kwargs is None:
         peak_finder_kwargs = {}
@@ -85,8 +85,7 @@ def find_well_centres(image: np.array,
     return well_coords
 
 
-def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool = False) \
-        -> tuple[np.array, np.array] | tuple[np.array, np.array, float]:
+def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool = False):
     """Automatically rotate the image so that it is parallel to the coordinate axes.
 
     Algorithm:
@@ -97,8 +96,7 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
         rescale the well coords to unit length during the algorithm.
 
     Returns:
-        - rotated image
-        - rotated well coordinates
+        - rotated image so that well grid is axis-aligned
     """
     assert len(image.shape) == 2
     assert len(well_coords.shape) == 2
@@ -119,6 +117,11 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
         dists = dists + inf_diags
 
         min_dists = np.min(dists, axis=0)
+
+        # For more robustness, only take the mean of the 25 to 75 percentile of distances
+        # This is because in sparse grids, the nearest neighbour will be across a diagonal (and therefore pushing away from a level grid)
+        min_dists = np.sort(min_dists)
+        min_dists = min_dists[int(0.25 * len(min_dists)):int(0.75 * len(min_dists))]
         mean_min_dist = np.mean(min_dists)
         return mean_min_dist
 
@@ -137,6 +140,7 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
 
     # First, centre the well coordinates so the rotation does not affect average position
     original_well_centroid = np.mean(well_coords, axis=0)
+    well_coords = np.copy(well_coords)
     well_coords -= original_well_centroid
 
     # Rescale the well cords to approx unit length (must be isotropic)
@@ -151,18 +155,11 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
     logger.debug(f"Converged Manhattan distance: {dx:.2f}")
 
     rotated_image = ndimage.rotate(image, np.rad2deg(theta), mode='nearest', reshape=False)
-    rotated_wells = well_coords @ np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]).T
-
-    # Undo the normalisations to the data
-    rotated_wells *= scale_fac
-    well_coords *= scale_fac
-    rotated_wells += original_well_centroid
-    well_coords += original_well_centroid
 
     if return_theta:
-        return rotated_image, rotated_wells, theta
+        return rotated_image, theta
     else:
-        return rotated_image, rotated_wells
+        return rotated_image
 
 
 def _find_well_centres_2d(image_2d: np.array,

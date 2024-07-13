@@ -38,7 +38,9 @@ class TestRotationCorrection(unittest.TestCase):
             points_centred_rotated = points_centred @ rotation_matrix.T
             rotated_points = points_centred_rotated + offset
 
-            corrected_image, corrected_points = correct_rotations(image, rotated_points)
+            corrected_image, theta_star = correct_rotations(image, rotated_points, return_theta=True)
+            rotation_theta_star = np.array([[np.cos(theta_star), -np.sin(theta_star)], [np.sin(theta_star), np.cos(theta_star)]])
+            corrected_points = (rotated_points - offset) @ rotation_theta_star.T + offset
 
             if False:  # For debugging
                 plt.scatter(points[:, 0], points[:, 1], label='Original points')
@@ -64,20 +66,20 @@ class TestRotationCorrection(unittest.TestCase):
 
         for theta in thetas:
             im_rotated = ndimage.rotate(image, np.rad2deg(theta), mode='nearest')
-            well_coords_rotated = np.array(find_well_centres(im_rotated, threshold=0.25))
-            corrected_image, corrected_points, theta_star = correct_rotations(im_rotated, well_coords_rotated, return_theta=True)
+            well_coords_rotated = np.array(find_well_centres(im_rotated, threshold=0.20))
+            corrected_image, theta_star = correct_rotations(im_rotated, well_coords_rotated, return_theta=True)
 
             if False:
                 fig, axs = plt.subplots(1, 2, figsize=(6, 3), dpi=200)
-                fig.suptitle(f'Rotation: {theta:.2g} rad')
+                fig.suptitle(f'Rotation: {theta:.2g} rad, error: {abs(theta_star + theta):.2g} rad')
                 axs[0].imshow(im_rotated)
-                axs[0].scatter(well_coords_rotated[:, 1], well_coords_rotated[:, 0])
+                axs[0].scatter(well_coords_rotated[:, 1], well_coords_rotated[:, 0], s=1, c='red')
                 axs[1].imshow(corrected_image)
-                axs[1].scatter(corrected_points[:, 1], corrected_points[:, 0])
                 plt.show()
 
             self.assertTrue(np.isclose(theta_star, -theta, atol=0.05),
                             f'Failed on theta={theta}, theta_star={theta_star}')
+
 
 
 

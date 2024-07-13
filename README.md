@@ -91,4 +91,4 @@ which has options for high order spline interpolation.
 
 1. Update version number in `__version__.py`
 2. `pipenv run python setup.py sdist bdist_wheel`
-3. `pipenv run twine upload dist/*`
+3. `pipenv run twine upload dist/*` (set username to `__token__`, and password to pypi API token)

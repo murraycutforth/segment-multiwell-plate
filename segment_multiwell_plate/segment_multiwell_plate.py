@@ -42,13 +42,13 @@ def segment_multiwell_plate(image: np.array,
     if blob_log_kwargs is None:
         blob_log_kwargs = {}
 
-    image = correct_rotations(image, well_coords=find_well_centres(image, **blob_log_kwargs))
+    if peak_finder_kwargs is None:
+        peak_finder_kwargs = {}
+
+    image, rotation_angle = correct_image_rotation(image, well_coords=find_well_centres(image, **blob_log_kwargs), blob_log_kwargs=blob_log_kwargs)
 
     # Re-locate well coords after rotation correction
     well_coords = find_well_centres(image, **blob_log_kwargs)
-
-    if peak_finder_kwargs is None:
-        peak_finder_kwargs = {}
 
     i_vals, j_vals = _generate_grid_crop_coordinates(image, well_coords, **peak_finder_kwargs)
 
@@ -85,7 +85,30 @@ def find_well_centres(image: np.array,
     return well_coords
 
 
-def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool = False):
+def correct_image_rotation(im: np.array, well_coords: np.array, blob_log_kwargs: dict):
+    """
+    Correct the rotation of an image by finding the rotation angle and applying it to the image
+    """
+    rotated_im, rotation_angle = _correct_rotations_l1nn(im, well_coords, return_theta=True)
+
+    # Iterate on the rotation correction, adding some random jitter on the well coordinates to smooth out errors in well centre estimation
+    if rotation_angle > 0.01:
+        print(f"Found rotation angle of {rotation_angle:.2g} rad. Iterating on correction")
+        thetas = [rotation_angle]
+        n_iters = 5
+
+        for i in range(n_iters):
+            well_coords_it = find_well_centres(rotated_im, **blob_log_kwargs)
+            well_coords_it += np.random.normal(0, 0.5, well_coords_it.shape)
+            rotated_im, rotation_angle = _correct_rotations_l1nn(rotated_im, well_coords_it, return_theta=True)
+            thetas.append(rotation_angle)
+
+        rotation_angle = np.sum(thetas)
+
+    return rotated_im, rotation_angle
+
+
+def _correct_rotations_l1nn(image: np.array, well_coords: np.array, return_theta: bool = False):
     """Automatically rotate the image so that it is parallel to the coordinate axes.
 
     Algorithm:
@@ -98,9 +121,9 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
     Returns:
         - rotated image so that well grid is axis-aligned
     """
-    assert len(image.shape) == 2
     assert len(well_coords.shape) == 2
     assert well_coords.shape[1] == 2
+    assert len(image.shape) in (2, 3)
 
     def cost(rotation_angle) -> float:
         """Cost function to be minimised: find the rotation angle which minimises the L1 distance between neighbours
@@ -133,7 +156,12 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
 
     logger.debug(f"Correcting rotation by {np.rad2deg(theta):.2f} degrees")
 
-    rotated_image = ndimage.rotate(image, np.rad2deg(theta), mode='nearest', reshape=False)
+    if len(image.shape) == 2:
+        axes = (0, 1)
+    else:
+        axes = (1, 2)
+
+    rotated_image = ndimage.rotate(image, np.rad2deg(theta), axes=axes, mode='nearest', reshape=False)
 
     if return_theta:
         return rotated_image, theta

@@ -7,7 +7,7 @@ import scipy.ndimage
 import skimage
 from scipy import ndimage
 
-from segment_multiwell_plate.segment_multiwell_plate import correct_rotations, find_well_centres, _average_d_min
+from segment_multiwell_plate.segment_multiwell_plate import _correct_rotations_l1nn, find_well_centres, _average_d_min
 
 
 class TestRotationCorrection(unittest.TestCase):
@@ -60,7 +60,7 @@ class TestRotationCorrection(unittest.TestCase):
             points_centred_rotated = points_centred @ rotation_matrix.T
             rotated_points = points_centred_rotated + offset
 
-            corrected_image, theta_star = correct_rotations(image, rotated_points, return_theta=True)
+            corrected_image, theta_star = _correct_rotations_l1nn(image, rotated_points, return_theta=True)
             rotation_theta_star = np.array([[np.cos(theta_star), -np.sin(theta_star)], [np.sin(theta_star), np.cos(theta_star)]])
             corrected_points = (rotated_points - offset) @ rotation_theta_star.T + offset
 
@@ -93,7 +93,7 @@ class TestRotationCorrection(unittest.TestCase):
             well_coords_rotated = np.array(find_well_centres(im_rotated, threshold=0.20))
             f0 = _average_d_min(well_coords_rotated)
 
-            corrected_image, theta_star = correct_rotations(im_rotated, well_coords_rotated, return_theta=True)
+            corrected_image, theta_star = _correct_rotations_l1nn(im_rotated, well_coords_rotated, return_theta=True)
             rot_mat = np.array([[np.cos(theta_star), -np.sin(theta_star)], [np.sin(theta_star), np.cos(theta_star)]])
             well_coords_rotated_corrected = well_coords_rotated @ rot_mat.T
             f_final = _average_d_min(well_coords_rotated_corrected)
@@ -180,7 +180,7 @@ class TestRotationCorrection(unittest.TestCase):
             rot_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
             well_coords_rotated = well_coords @ rot_matrix.T  # Note that these coords won't exactly match the image due to the padding
 
-            corrected_image, theta_star = correct_rotations(im_rotated, well_coords_rotated, return_theta=True)
+            corrected_image, theta_star = _correct_rotations_l1nn(im_rotated, well_coords_rotated, return_theta=True)
 
             self.assertTrue(np.isclose(theta_star, -theta, atol=1e-3),
                             f'Failed on theta={theta}, theta_star={theta_star}')

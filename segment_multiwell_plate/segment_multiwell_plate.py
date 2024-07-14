@@ -121,7 +121,7 @@ def correct_rotations(image: np.array, well_coords: np.array, return_theta: bool
     # Note - the minimiser is invariant to translations, and I haven't observed that rescaling the points is important either
     # since the tolerance is defined in terms of theta, in radians.
 
-    result = scipy.optimize.minimize_scalar(cost, bounds=(-np.pi / 4, np.pi / 4), method='bounded', tol=1e-3)
+    result = scipy.optimize.minimize_scalar(cost, bounds=(-np.pi / 4, np.pi / 4), method='bounded', options={"xatol": 1e-3})
     theta = result.x
 
     # Because inside the cost function we are rotating well coords by applying a rotation matrix, the cost function
